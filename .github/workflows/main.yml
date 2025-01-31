@@ -1,0 +1,53 @@
+name: Air quality analysis Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-run:
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_IMAGE: ghcr.io/mads-zhang/pipeline:latest  # Lowercase repo name
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        tags: ${{ env.DOCKER_IMAGE }}
+        load: true
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Run analysis pipeline
+      run: |
+        docker run --name analysis-runner \
+          -v ${{ github.workspace }}/results:/project/results \
+          ${{ env.DOCKER_IMAGE }}
+          
+    - name: Upload results
+      uses: actions/upload-artifact@v4
+      with:
+        name: analysis-results
+        path: results/*
+
+    - name: Clean up container
+      run: |
+        echo "Cleaning up analysis-runner container..."
+        docker rm analysis-runner
+        echo "Container removed successfully."
+        
+    - name: Clean up Docker images
+      run: |
+        echo "Cleaning up Docker images..."
+        docker rmi ${{ env.DOCKER_IMAGE }}
+        echo "Docker image removed successfully."
